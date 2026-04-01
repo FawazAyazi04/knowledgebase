@@ -1,115 +1,114 @@
 import os
-from langchain_community.document_loaders import TextLoader, DirectoryLoader # to load and read the document
-from langchain_text_splitters import CharacterTextSplitter # to split the documents into chunks
-from langchain_openai import OpenAIEmbeddings # to make vector embeddings
-from langchain_chroma import Chroma  # to store vector embeddings in vector database
-from dotenv import load_dotenv 
 import sys
+from langchain_community.document_loaders import TextLoader, DirectoryLoader, PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from dotenv import load_dotenv
 
 load_dotenv()
 sys.stdout.reconfigure(encoding='utf-8')
 
-def load_documents(docs_path = r"knowledgebase\docs"):
-    """Loading  the file"""
-    print(f"Loading documents from {docs_path}...")
-    
-    # Check if docs directory exists
-    if not os.path.exists(docs_path):
-        raise FileNotFoundError(f"The directory {docs_path} does not exist. Please create it and add your company files.")
-    
-    # Load all .txt files from the docs directory
-    loader = DirectoryLoader(
-        path=docs_path,
-        glob="*.txt",
-        loader_cls=TextLoader, 
-        loader_kwargs={'encoding': 'utf-8'}
-    )
-    
-    documents = loader.load()
-    
-    if len(documents) == 0:
-        raise FileNotFoundError(f"No .txt files found in {docs_path}. Please add your company documents.")
-    
-   
-    # for i, doc in enumerate(documents[:2]):  # Show first 2 documents
-    #     print(f"\nDocument {i+1}:")
-    #     print(f"  Source: {doc.metadata['source']}")
-    #     print(f"  Content length: {len(doc.page_content)} characters")
-    #     clean_text = doc.page_content.replace("\ufeff", "")
-    #     print(f"  Content preview: {clean_text[:100]}...")
-    #     print(f"  metadata: {doc.metadata}")
+# ── All paths are relative to THIS file's location, not the working directory ──
+BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
+DOCS_PATH       = os.path.join(BASE_DIR, "docs")
+PERSIST_DIR     = os.path.join(BASE_DIR, "db", "chroma_db")
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
+
+def get_embedding_model():
+    print("Loading embedding model…")
+    return HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL,
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
+    )
+
+
+def load_documents(docs_path=DOCS_PATH):
+    if not os.path.exists(docs_path):
+        raise FileNotFoundError(
+            f"\nDocs folder not found: {docs_path}\n"
+            "Make sure 'knowledgebase/docs/' exists next to ingestion_pipeline.py "
+            "and contains your .txt or .pdf files."
+        )
+
+    documents = []
+
+    # .txt files
+    txt_loader = DirectoryLoader(
+        path=docs_path, glob="*.txt",
+        loader_cls=TextLoader,
+        loader_kwargs={"encoding": "utf-8"},
+        silent_errors=True,
+    )
+    documents.extend(txt_loader.load())
+
+    # .pdf files
+    for fname in os.listdir(docs_path):
+        if fname.lower().endswith(".pdf"):
+            loader = PyPDFLoader(os.path.join(docs_path, fname))
+            documents.extend(loader.load())
+
+    if not documents:
+        raise FileNotFoundError(
+            f"No .txt or .pdf files found in: {docs_path}\n"
+            "Please add your documents there."
+        )
+
+    print(f"Loaded {len(documents)} document(s) from '{docs_path}'.")
     return documents
 
 
-def split_documents(documents, chunk_size=1000, chunk_overlap=0):
-    """Split documents into smaller chunks with overlap"""
-    print("Splitting documents into chunks")
-    
-    text_splitter = CharacterTextSplitter(
-        chunk_size=chunk_size, 
-        chunk_overlap=chunk_overlap
+def split_documents(documents, chunk_size=800, chunk_overlap=100):
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
     )
-    
-    chunks = text_splitter.split_documents(documents)
-    
-    
-    
+    chunks = splitter.split_documents(documents)
+    print(f"Split into {len(chunks)} chunks.")
     return chunks
 
-def create_vector_store(chunks, persist_directory="db/chroma_db"):
-    """Create and persist ChromaDB vector store"""
-    print("Creating embeddings and storing in ChromaDB...")
-        
-    embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
-    
-    # Create ChromaDB vector store
-    print("Creating vector store")
-    vectorstore = Chroma.from_documents(
+
+def create_vector_store(chunks, persist_directory=PERSIST_DIR):
+    emb = get_embedding_model()
+    vs = Chroma.from_documents(
         documents=chunks,
-        embedding=embedding_model,
-        persist_directory=persist_directory, 
-        collection_metadata={"hnsw:space": "cosine"}
+        embedding=emb,
+        persist_directory=persist_directory,
+        collection_metadata={"hnsw:space": "cosine"},
     )
-    print("Finished creating vector store")
-    
-    print(f"Vector store created and saved to {persist_directory}")
-    return vectorstore
+    print(f"Vector store saved → '{persist_directory}' ({len(chunks)} chunks).")
+    return vs
 
-def main():
-    """Main ingestion pipeline"""
-    print("=== RAG Document Ingestion Pipeline ===\n")
-    
-    # Define paths
-    docs_path = r"knowledgebase/docs"
-    persistent_directory = "db/chroma_db"
-    
-    # Check if vector store already exists
-    if os.path.exists(persistent_directory):
-        print("Vector store already exists. No need to re-process documents.")
-        
-        embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
-        vectorstore = Chroma(
-            persist_directory=persistent_directory,
-            embedding_function=embedding_model, 
-            collection_metadata={"hnsw:space": "cosine"}
+
+def ingest(docs_path=DOCS_PATH, persist_directory=PERSIST_DIR, force=False):
+    """
+    Full ingestion pipeline.
+    Skips re-ingestion if the store already exists (set force=True to override).
+    """
+    print("=== Ingestion Pipeline ===")
+    print(f"Docs path : {docs_path}")
+    print(f"Vector DB : {persist_directory}\n")
+
+    if os.path.exists(persist_directory) and not force:
+        print("Existing vector store found — skipping re-ingestion.")
+        emb = get_embedding_model()
+        vs = Chroma(
+            persist_directory=persist_directory,
+            embedding_function=emb,
+            collection_metadata={"hnsw:space": "cosine"},
         )
-        print(f"Loaded existing vector store with {vectorstore._collection.count()} documents")
-        return vectorstore
-    
-    print("Persistent directory does not exist. Initializing vector store...\n")
-    
-    # Step 1: Load documents
-    documents = load_documents(docs_path)  
+        print(f"Loaded store: {vs._collection.count()} chunks.\n")
+        return vs
 
-    # Step 2: Split into chunks
-    chunks = split_documents(documents)
-    
-    # # Step 3: Create vector store
-    vectorstore = create_vector_store(chunks, persistent_directory)
-    
-    print("\nIngestion complete! Your documents are now ready for RAG queries.")
-    return vectorstore
+    documents = load_documents(docs_path)
+    chunks    = split_documents(documents)
+    vs        = create_vector_store(chunks, persist_directory)
+    print("Ingestion complete!\n")
+    return vs
+
 
 if __name__ == "__main__":
-    main()
+    ingest()
