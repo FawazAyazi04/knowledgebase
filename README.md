@@ -1,91 +1,51 @@
-# 🔍 KnowledgeBase Search Engine
+# 📚 KnowledgeBase Search Engine: RAG-Powered Document Assistant
 
-A fully free, open-source RAG (Retrieval-Augmented Generation) web app built with Streamlit.
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![LangChain](https://img.shields.io/badge/LangChain-Enabled-green.svg)
+![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B.svg)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_Store-orange.svg)
 
-## Stack
+## 📌 Project Overview
+A modular, full-stack Retrieval-Augmented Generation (RAG) application designed to ingest complex text and PDF documents and synthesize highly accurate, context-aware answers. This project demonstrates how to build a production-ready AI search engine using entirely open-weight models and cost-effective infrastructure.
 
-| Component | Tool | Cost |
-|-----------|------|------|
-| LLM | Llama 3 8B via **Groq** | Free tier |
-| Embeddings | `all-MiniLM-L6-v2` via HuggingFace | Free / local |
-| Vector DB | **ChromaDB** | Free / local |
-| Frontend | **Streamlit** | Free |
-
----
-
-## Setup
-
-### 1. Clone & install
-
-```bash
-git clone <your-repo>
-cd <your-repo>
-pip install -r requirements.txt
-```
-
-### 2. Get a free Groq API key
-
-1. Go to [console.groq.com](https://console.groq.com)
-2. Sign up (free)
-3. Create an API key
-4. Copy it
-
-### 3. Configure environment (optional — can also enter in UI)
-
-```bash
-cp .env.example .env
-# Edit .env and paste your GROQ_API_KEY
-```
-
-### 4. Add your documents
-
-Place `.txt` or `.pdf` files in `knowledgebase/docs/`.  
-(You can also upload files directly in the Streamlit sidebar.)
-
-### 5. Run the app
-
-```bash
-streamlit run app.py
-```
+**Key Features:**
+* **Semantic Search:** Replaces rigid keyword matching with dense vector retrieval.
+* **History-Aware Generation:** Maintains conversational context for multi-turn follow-up queries.
+* **Privacy-First Embeddings:** Document chunking and vector generation occur 100% locally.
+* **Low-Latency Inference:** Utilizes the Groq LPU inference engine for near-instantaneous LLM responses.
 
 ---
 
-## Project Structure
+## 🏗️ System Architecture & Tech Stack
 
-```
-├── app.py                  # Streamlit web app (main entry point)
-├── ingestion_pipeline.py   # Load docs → chunk → embed → store in ChromaDB
-├── retrieval_pipeline.py   # Query ChromaDB → return relevant chunks
-├── answer_generation.py    # Single-turn RAG answer generation
-├── history_aware_gen.py    # Multi-turn chat with conversation history
-├── requirements.txt
-├── .env.example
+| Component | Technology | Rationale / Design Decision |
+| :--- | :--- | :--- |
+| **LLM Synthesis** | Llama 3 (8B) via **Groq** | Chosen for blazing-fast inference speeds and high-quality reasoning on free-tier constraints. |
+| **Embeddings** | HuggingFace (`all-MiniLM-L6-v2`) | Lightweight, CPU-friendly open-source model perfect for high-accuracy local vectorization. |
+| **Vector Database** | **ChromaDB** | Local, persistent vector store that removes the need for complex cloud database provisioning. |
+| **Frontend UI** | **Streamlit** | Enables rapid prototyping of a clean, responsive chat interface. |
+| **Orchestration** | **LangChain** | Manages the complex pipeline of document loading, splitting, retrieving, and prompting. |
+
+---
+
+## ⚙️ How It Works (The RAG Pipeline)
+
+1.  **Ingestion & Processing:** `PyPDFLoader` and `TextLoader` parse raw documents. The text is split using `RecursiveCharacterTextSplitter` with defined chunk overlaps to ensure semantic concepts aren't severed.
+2.  **Vectorization:** Text chunks are passed through the local HuggingFace embedding model to generate 384-dimensional vectors, which are persisted to the ChromaDB filesystem.
+3.  **Retrieval:** User queries are embedded and matched against the database using Cosine Similarity to extract the top-K most relevant chunks.
+4.  **Contextual Synthesis:** The retrieved context and the user's conversation history are injected into a strict system prompt, forcing the Llama 3 model to ground its answers purely in the provided documents.
+
+---
+
+## 📂 Repository Structure
+
+```text
+├── app.py                  # Streamlit web app (Main UI entry point)
+├── ingestion_pipeline.py   # ETL script: Load docs → chunk → embed → ChromaDB
+├── retrieval_pipeline.py   # Core retrieval logic & similarity search implementation
+├── answer_generation.py    # Single-turn RAG chain construction
+├── history_aware_gen.py    # Multi-turn conversational memory implementation
+├── requirements.txt        # Project dependencies
+├── .env.example            # Environment variable template
 └── knowledgebase/
-    └── docs/               # Place your .txt and .pdf files here
-```
-
----
-
-## How It Works
-
-1. **Ingestion**: Documents are loaded, split into overlapping chunks, embedded using a local HuggingFace model, and stored in ChromaDB.
-2. **Retrieval**: User queries are embedded and matched against stored chunks via cosine similarity.
-3. **Generation**: Retrieved chunks + conversation history are sent to Llama 3 (via Groq) to synthesize a grounded answer.
-
----
-
-## Running Scripts Directly
-
-```bash
-# Ingest documents
-python ingestion_pipeline.py
-
-# Test retrieval only
-python retrieval_pipeline.py
-
-# Single-turn answer
-python answer_generation.py
-
-# Multi-turn CLI chat
-python history_aware_gen.py
-```
+    └── docs/               # Source directory for .txt and .pdf files

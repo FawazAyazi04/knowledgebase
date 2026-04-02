@@ -10,10 +10,14 @@ import json
 import uuid
 import datetime
 import streamlit as st
-from dotenv import load_dotenv
 
-load_dotenv()
-
+try:
+    import streamlit as st
+    api_key = st.secrets["GROQ_API_KEY"]  # For Streamlit Cloud
+except:
+    from dotenv import load_dotenv
+    load_dotenv()
+    api_key = os.getenv("GROQ_API_KEY")   # For local
 st.set_page_config(
     page_title="KnowledgeBase Search",
     page_icon="🔍",
