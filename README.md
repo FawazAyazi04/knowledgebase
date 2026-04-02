@@ -5,6 +5,8 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B.svg)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_Store-orange.svg)
 
+![Final Website link](https://knowledgebase-syedfawazayazi.streamlit.app/)
+
 ## 📌 Project Overview
 A modular, full-stack Retrieval-Augmented Generation (RAG) application designed to ingest complex text and PDF documents and synthesize highly accurate, context-aware answers. This project demonstrates how to build a production-ready AI search engine using entirely open-weight models and cost-effective infrastructure.
 
